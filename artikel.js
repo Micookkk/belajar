@@ -15,34 +15,39 @@ const con = mysql.createConnection({
   database: "game"
 });
 
-                                     /* MENCARI DAN MENAMPILKAN */
+/* MENCARI DAN MENAMPILKAN */
 
 //  Menampilkan artikel berdasarkan pencarian
 app.get('/search/artikel', (req, res) => {
   const { judul } = req.query;
-  let query = `select from artikel where judul like '%${judul}%'`
+  let query = `select artikel.id, artikel.judul, artikel.isi, kategori.nama AS kategori, artikel.tanggal from artikel join kategori on (kategori_id = kategori.id) 
+  where artikel.judul like '%${judul}%' `
 
   con.query(query, (err, result, fields) => {
     if (err) {
       console.error(err)
       res.json({ message: "Artikel Tidak Bisa Ditemukan." })
+    } else if (result.length === 0) {
+      res.json({message: "Artikel Dengan Judul " + judul + " Tidak Ditemukan"})
+    } else {
+      res.json(result)
     };
-    res.json(result)
   });
 });
 
-// Menampilkan artikel sesuai urutan yang diminta = CHATGPT =
+// Menampilkan artikel sesuai urutan yang diminta = CHATGPT = BY ID BELOM
 app.get('/artikel/search-by', (req, res) => {
-  const { urutan, limit } = req.query;
+  const { urutan, limit} = req.query;
   let query = 'SELECT * FROM artikel';
 
   if (urutan === 'terbaru') {
     query += ' ORDER BY tanggal DESC';
   } else if (urutan === 'terlama') {
     query += ' ORDER BY tanggal ASC';
-  } else if (urutan === 'terpopuler') {
-    query += ' ORDER BY views DESC';
+  } else if (urutan === 'nomor') {
+    query += ' ORDER BY id ASC'
   }
+
 
   if (limit) {
     query += ` LIMIT ${limit}`;
@@ -59,26 +64,49 @@ app.get('/artikel/search-by', (req, res) => {
 });
 
 // - Menampilkan semua artikel berdasarkan kategori yang terpilih
-app.get('/kategori/artikel', (req, res) => {
-    const { kategori } = req.query;
-    const query = `SELECT artikel.*, kategori.nama AS kategori_nama FROM artikel JOIN kategori ON (artikel.kategori_id = kategori.id WHERE kategori.nama LIKE '%${kategori}%')`; /* CHATGPT */
+app.get('/kategori/artikel/', (req, res) => {
+  const { kategori } = req.query;
+  const query = `select artikel.id, artikel.judul, artikel.isi, kategori.nama AS kategori, artikel.tanggal from artikel join kategori on (kategori_id = kategori.id) 
+    where kategori.nama like '%${kategori}%'`
 
-    con.query(query, (err, result, fields) => {
-        if (err) {
-            console.error(err)
-            res.json({ message: "Artikel dengan kategori " + kategori + " tidak ditemukan"})
-        };
-        res.json(result)
-    });
+  con.query(query, (err, result, fields) => {
+    if (err) {
+      console.error(err)
+      res.json({ message: "Gagal Menampilkan Artikel Berdasarkan Kategori" })
+    } else if (result.length === 0) {
+      res.json({ message: "Artikel Dengan Kategori " + kategori + " Tidak Ditemukan" });
+    } else {
+      res.json(result);
+    }
+  });
+});
+
+// Menampilkan Semua List Kategori Berdasarkan id
+app.get('/kategori/list/:id?', (req, res) => {
+  let id = [];
+  let query = `select * from kategori`
+
+  if (req.params.id) {
+    query += ` where id = ?`
+    id = parseInt(req.params.id)
+  };
+
+  con.query(query, id, (err, result, fields) => {
+      if (err) {
+        console.error(err)
+        res.json({ message: "Gagal Menampilkan Kategori"})
+      };
+      res.json(result)
+  });
 });
 
 //  Menampilkan semua artikel - Menampilkan artikel berdasarkan id
 app.get('/artikel/list/:id?', (req, res) => {
   let id = [];
-  let query = `select * from artikel`
+  let query = `select artikel.id, artikel.judul, artikel.isi, kategori.nama AS kategori, artikel.tanggal from artikel join kategori on (kategori_id = kategori.id)`
 
   if (req.params.id) {
-    query += 'where id = ?'
+    query += ' where artikel.id = ?'
     id = parseInt(req.params.id)
   };
 
@@ -90,14 +118,14 @@ app.get('/artikel/list/:id?', (req, res) => {
     res.json(result);
   });
 });
-                                  /* END OF MENCARI DAN MENAMPILKAN */
+/* END OF MENCARI DAN MENAMPILKAN */
 
-                                  /* MEMEMBUAT DAN MENAMBAH */
+/* MEMEMBUAT DAN MENAMBAH */
 
 // - Membuat artikel baru
 app.post('/add/artikel', (req, res) => {
-  const { judul, isi } = req.body;
-  let query = `insert into artikel (title, isi) values ('${judul}', '${isi}')`
+  const { judul, isi, kategori_id } = req.body;
+  let query = `insert into artikel (judul, isi,  kategori_id) values ('${judul}', '${isi}', '${kategori_id}')`
 
   con.query(query, (err, result, fields) => {
     if (err) {
@@ -123,9 +151,9 @@ app.post('/add/kategori', (req, res) => {
   });
 });
 
-                                /* END OF MEMMBUAT DAN MENAMBAH */
+/* END OF MEMMBUAT DAN MENAMBAH */
 
-                                 /* EDIT  */
+/* EDIT  */
 
 // edit artikel 
 app.post('/update/artikel/:id', (req, res) => {
@@ -134,20 +162,23 @@ app.post('/update/artikel/:id', (req, res) => {
   let query = `update artikel set`
 
   if (judul && isi) {
-    query += `judul = '${judul}', isi = '${isi}' where id = ? `
+    query += ` judul = '${judul}', isi = '${isi}' where id = ? `
   } else {
 
     if (judul) {
-      query += `judul = '${title}',`
+      query += ` judul = '${judul}',`
     };
 
     if (isi) {
-      query += `kategori = '${isi}',`
+      query += ` isi = '${isi}',`
     };
+
+    query = query.slice(0, -1) + ' ';
+    query += 'where id = ?'
+
   };
 
-  query = query.slice(0, -1) + ' ';
-  query += 'where id = ?'
+
 
   con.query(query, id, (err, result, fields) => {
     if (err) {
@@ -160,27 +191,27 @@ app.post('/update/artikel/:id', (req, res) => {
 
 // edit kategori 
 app.post('/update/kategori/:id', (req, res) => {
-    const {nama} = req.body;
-    let id = parseInt(req.params.id)
-    let query = `update kategori set nama = '${nama}' where id = ${id}`
+  const { nama } = req.body;
+  let id = parseInt(req.params.id)
+  let query = `update kategori set nama = '${nama}' where id = ${id}`
 
-    con.query(query, id, (err, result, fields) => {
-      if (err) {
-        console.error(err)
-        res.json({ message: "Gagal Mengubah Kategori" })
-      };
-      res.json(result);
-    });
+  con.query(query, id, (err, result, fields) => {
+    if (err) {
+      console.error(err)
+      res.json({ message: "Gagal Mengubah Kategori" })
+    };
+    res.json(result);
+  });
 });
 
-                                /* END OF EDIT */
-                                
-                                /* DELETE */
+/* END OF EDIT */
+
+/* DELETE */
 // Menghapus artikel
 app.delete('/delete/artikel/:id', (req, res) => {
   let id = parseInt(req.params.id)
   let query = `delete from artikel where id = ${id}`
-  
+
   con.query(query, (err, result, fields) => {
     if (err) {
       console.error(err);
@@ -194,7 +225,7 @@ app.delete('/delete/artikel/:id', (req, res) => {
 app.delete('/delete/kategori/:id', (req, res) => {
   let id = parseInt(req.params.id)
   let query = `delete from kategori where id = ${id}`
-  
+
   con.query(query, (err, result, fields) => {
     if (err) {
       console.error(err);
@@ -203,7 +234,7 @@ app.delete('/delete/kategori/:id', (req, res) => {
     res.json(result);
   });
 });
-                               /* END OF DELETE */   
+/* END OF DELETE */
 
 app.listen(port, () => {
   console.log(`Server berjalan di port ${port}`);
