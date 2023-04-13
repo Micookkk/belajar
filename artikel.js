@@ -239,3 +239,5 @@ app.delete('/delete/kategori/:id', (req, res) => {
 app.listen(port, () => {
   console.log(`Server berjalan di port ${port}`);
 });
+
+// NEW UPDATE
